@@ -1,0 +1,104 @@
+{
+  "title": "UniFi Network Map",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit UniFi verbinden",
+        "description": "Gib die Daten deines UniFi-Controllers ein.",
+        "data": {
+          "url": "Controller-URL",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "site": "Site",
+          "verify_ssl": "SSL überprüfen"
+        },
+        "data_description": {
+          "url": "Schema angeben (http oder https) und Port falls nötig."
+        }
+      },
+      "init": {
+        "title": "Kartenoptionen",
+        "description": "Wähle, was auf der Karte erscheint und wie sie gerendert wird.",
+        "data": {
+          "include_ports": "Port-Beschriftungen anzeigen",
+          "include_clients": "Clients anzeigen",
+          "client_scope": "Client-Bereich",
+          "only_unifi": "Nur UniFi-Geräte",
+          "svg_isometric": "Isometrisches Layout",
+          "svg_width": "SVG-Breite (px)",
+          "svg_height": "SVG-Höhe (px)",
+          "request_timeout_seconds": "Anfrage-Timeout (Sekunden)",
+          "use_cache": "Gerenderte Karte cachen"
+        },
+        "data_description": {
+          "include_ports": "Fügt Switch-Port-Beschriftungen zu den Verbindungen hinzu.",
+          "include_clients": "Fügt Client-Geräte zur Topologie hinzu.",
+          "client_scope": "Wähle kabelgebundene, drahtlose oder alle Clients.",
+          "only_unifi": "Blendet Nicht-UniFi-Geräte in der Topologie aus.",
+          "svg_isometric": "Rendert eine 3D-ähnliche Ansicht.",
+          "svg_width": "Leer lassen für automatische Größe.",
+          "svg_height": "Leer lassen für automatische Größe.",
+          "request_timeout_seconds": "UniFi-API-Aufrufe nach dieser Anzahl Sekunden abbrechen.",
+          "use_cache": "Letztes Rendering zwischen Abfragen wiederverwenden."
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Gib eine gültige Controller-URL inklusive http oder https ein.",
+      "url_has_credentials": "Füge keinen Benutzernamen oder kein Passwort in die URL ein. Verwende die separaten Felder unten.",
+      "invalid_port": "Die URL enthält eine ungültige Portnummer. Ports müssen zwischen 1 und 65535 liegen.",
+      "empty_credential": "Benutzername, Passwort und Site dürfen nicht leer sein."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kartenoptionen",
+        "description": "Wähle, was auf der Karte erscheint und wie sie gerendert wird.",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Minuten)",
+          "include_ports": "Port-Beschriftungen anzeigen",
+          "include_clients": "Clients anzeigen",
+          "client_scope": "Client-Bereich",
+          "only_unifi": "Nur UniFi-Geräte",
+          "svg_isometric": "Isometrisches Layout",
+          "svg_width": "SVG-Breite (px)",
+          "svg_height": "SVG-Höhe (px)",
+          "request_timeout_seconds": "Anfrage-Timeout (Sekunden)",
+          "payload_cache_ttl": "Payload-Cache-TTL (Sekunden)",
+          "use_cache": "Gerenderte Karte cachen",
+          "tracked_clients": "Verfolgte Client-MACs",
+          "show_wan": "WAN-Upstream anzeigen",
+          "wan_label": "WAN ISP-Name",
+          "wan_speed": "WAN ISP-Geschwindigkeit",
+          "wan2_label": "WAN2 ISP-Name",
+          "wan2_speed": "WAN2 ISP-Geschwindigkeit",
+          "wan2_disabled": "WAN2-Status"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft Daten vom UniFi-Controller abgerufen werden.",
+          "include_ports": "Fügt Switch-Port-Beschriftungen zu den Verbindungen hinzu.",
+          "include_clients": "Fügt Client-Geräte zur Topologie hinzu.",
+          "client_scope": "Wähle kabelgebundene, drahtlose oder alle Clients.",
+          "only_unifi": "Blendet Nicht-UniFi-Geräte in der Topologie aus.",
+          "svg_isometric": "Rendert eine 3D-ähnliche Ansicht.",
+          "svg_width": "Leer lassen für automatische Größe.",
+          "svg_height": "Leer lassen für automatische Größe.",
+          "request_timeout_seconds": "UniFi-API-Aufrufe nach dieser Anzahl Sekunden abbrechen.",
+          "payload_cache_ttl": "Angereicherte Payload-Daten für diese Anzahl Sekunden cachen. Auf 0 setzen zum Deaktivieren.",
+          "use_cache": "Letztes Rendering zwischen Abfragen wiederverwenden.",
+          "tracked_clients": "MAC-Adressen von Clients für Präsenzsensoren. Eine pro Zeile, z.B. aa:bb:cc:dd:ee:ff",
+          "show_wan": "Zeigt Globus-Symbol und WAN-Schnittstelleninfo über dem Gateway an.",
+          "wan_label": "Benutzerdefiniertes Label für WAN1 (z.B. Telekom Glasfaser). Leer lassen für automatische Erkennung.",
+          "wan_speed": "Benutzerdefinierte ISP-Geschwindigkeit für WAN1 (z.B. 1 Gbps). Leer lassen für automatische Erkennung.",
+          "wan2_label": "Benutzerdefiniertes Label für WAN2. Leer lassen für automatische Erkennung.",
+          "wan2_speed": "Benutzerdefinierte ISP-Geschwindigkeit für WAN2. Leer lassen für automatische Erkennung.",
+          "wan2_disabled": "Erkennt automatisch vom Controller. Auf Deaktiviert setzen, um WAN2 auszublenden."
+        }
+      }
+    },
+    "error": {
+      "expected_int": "Gib eine ganze Anzahl von Pixeln ein oder lasse das Feld leer."
+    }
+  }
+}

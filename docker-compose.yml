@@ -1,0 +1,41 @@
+services:
+  # 1. Home Assistant Container
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./ha-config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: always
+    privileged: true
+    network_mode: host # Wichtig für die Erkennung von Geräten im Netzwerk
+
+  # 2. MQTT Broker (Die Brücke zwischen Zigbee und HA)
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: always
+    ports:
+      - 1883:1883
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  # 3. Zigbee2MQTT
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: koenkk/zigbee2mqtt:latest
+    restart: always
+    volumes:
+      - ./z2m-data:/app/data
+      - /run/udev:/run/udev:ro
+    ports:
+      - 8080:8080 # Web-Oberfläche für Zigbee
+    environment:
+      - TZ=Europe/Berlin
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0 # Dein Stick-Pfad
+    depends_on:
+      - mosquitto

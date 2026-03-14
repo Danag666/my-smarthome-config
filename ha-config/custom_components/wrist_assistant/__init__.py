@@ -1,0 +1,636 @@
+"""Wrist Assistant delta API integration."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+import voluptuous as vol
+
+from homeassistant.components import persistent_notification
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import network
+
+from .api import (
+    PAIRING_CLIENT_ID,
+    DeltaCoordinator,
+    PairingCoordinator,
+    PairingRedeemView,
+    WatchSummaryView,
+    WatchUpdatesView,
+)
+from .apns_config import APNsConfig, APNsConfigStore, APNsConfigView
+from .apns_client import APNsClient
+from .camera_devices import CameraDevicesView
+from .camera_stream import (
+    CameraBatchView,
+    CameraStreamCoordinator,
+    CameraStreamView,
+    CameraViewportView,
+)
+from .const import (
+    DOMAIN,
+    PLATFORMS,
+    WristAssistantConfigEntry,
+    WristAssistantData,
+)
+from .audio_upload import AudioUploadView
+from .notifications import (
+    NotificationRegisterView,
+    NotificationTokenStore,
+)
+
+_LOGGER = logging.getLogger(__name__)
+SERVICE_FORCE_RESYNC = "force_resync"
+SERVICE_CREATE_PAIRING_CODE = "create_pairing_code"
+SERVICE_SEND_NOTIFICATION = "send_notification"
+_BUNDLED_APNS_KEY_ID = "XZ9WA28KN3"
+_BUNDLED_APNS_TEAM_ID = "8265CSQJ66"
+_BUNDLED_APNS_TOPIC = "com.nylondiamond.wristassistant.watchkitapp"
+
+# Unique ID suffixes from removed entity classes (cleanup on upgrade)
+_ORPHANED_SUFFIXES = ("_entity_list", "_refresh_pairing_qr", "_pairing_qr", "_connection_qr")
+# Entities to auto-disable on upgrade (disabled-by-default only affects new installs)
+_DISABLE_ON_UPGRADE_SUFFIXES = (
+    "_events_processed",
+    "_buffer_usage",
+    "_events_per_minute",
+    "_pairing_expires_at",
+    "_poll_interval",
+    "_connected_since",
+)
+_PAIRING_NOTIFICATION_ID_TEMPLATE = "wrist_assistant_pairing_%s"
+_CREATE_PAIRING_SCHEMA = vol.Schema(
+    {
+        vol.Optional("local_url"): cv.string,
+        vol.Optional("remote_url"): cv.string,
+        vol.Optional("lifespan_days", default=3650): vol.All(
+            vol.Coerce(int),
+            vol.Range(min=1, max=36500),
+        ),
+    }
+)
+_ACTION_SCHEMA = vol.Schema(
+    {
+        vol.Optional("title"): cv.string,
+        vol.Optional("label"): cv.string,
+        vol.Optional("domain"): cv.string,
+        vol.Optional("service"): cv.string,
+        vol.Optional("service_data"): dict,
+        vol.Optional("entity_id"): cv.string,
+        vol.Optional("state"): cv.string,
+        vol.Optional("friendly_name"): cv.string,
+        vol.Optional("attributes"): dict,
+        vol.Optional("icon"): cv.string,
+        # Legacy keys (ignored by entity buttons, kept for schema compat)
+        vol.Optional("destructive", default=False): cv.boolean,
+        vol.Optional("repeatable", default=False): cv.boolean,
+        vol.Optional("confirm", default=False): cv.boolean,
+        vol.Optional("subtitle"): cv.string,
+        vol.Optional("live_subtitle", default=False): cv.boolean,
+    }
+)
+_SEND_NOTIFICATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("message"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("target"): cv.string,
+        vol.Optional("actions"): vol.All(
+            cv.ensure_list, [_ACTION_SCHEMA], vol.Length(min=1, max=4)
+        ),
+        vol.Optional("data"): dict,
+        vol.Optional("sound"): cv.string,
+        vol.Optional("push_type", default="alert"): vol.In(["alert", "background"]),
+        vol.Optional("tag"): cv.string,
+        vol.Optional("group"): cv.string,
+        vol.Optional("priority"): vol.In(
+            ["passive", "active", "time-sensitive", "critical"]
+        ),
+    }
+)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: WristAssistantConfigEntry) -> bool:
+    """Set up Wrist Assistant from a config entry."""
+    _cleanup_orphaned_entities(hass, entry)
+    _disable_noisy_entities(hass, entry)
+
+    coordinator = DeltaCoordinator(hass)
+    pairing_coordinator = PairingCoordinator(hass)
+    camera_stream_coordinator = CameraStreamCoordinator()
+    notification_store = NotificationTokenStore(hass)
+    apns_config_store = APNsConfigStore(hass)
+    await notification_store.async_load()
+    await apns_config_store.async_load()
+
+    # Register server capabilities
+    coordinator.register_capability("gzip")
+    coordinator.register_capability("slim_payloads")
+    coordinator.register_capability("camera_batch")
+    coordinator.register_capability("camera_devices")
+    coordinator.register_capability("push_notifications")
+
+    runtime_data = WristAssistantData(
+        coordinator=coordinator,
+        pairing_coordinator=pairing_coordinator,
+        camera_stream_coordinator=camera_stream_coordinator,
+        notification_store=notification_store,
+        apns_config_store=apns_config_store,
+    )
+    entry.runtime_data = runtime_data
+    hass.data[DOMAIN] = runtime_data
+    hass.http.register_view(WatchUpdatesView(hass))
+    hass.http.register_view(WatchSummaryView(hass))
+    hass.http.register_view(PairingRedeemView(hass))
+    hass.http.register_view(CameraStreamView(hass))
+    hass.http.register_view(CameraViewportView(hass))
+    hass.http.register_view(CameraBatchView(hass))
+    hass.http.register_view(CameraDevicesView(hass))
+    hass.http.register_view(NotificationRegisterView(hass))
+    hass.http.register_view(AudioUploadView(hass))
+
+    async def _reload_apns_client() -> None:
+        apns_client = await _create_apns_client(hass, apns_config_store)
+        if apns_client is None:
+            runtime_data.apns_client = None
+            _LOGGER.warning("APNs client unavailable")
+            return
+        runtime_data.apns_client = apns_client
+        _LOGGER.info("APNs client ready")
+
+    hass.http.register_view(APNsConfigView(apns_config_store, _reload_apns_client))
+
+    # APNs client – read credentials in executor to avoid blocking the event loop.
+    await _reload_apns_client()
+
+    # Revoke orphaned pairing refresh tokens from previous runs that were
+    # never redeemed (e.g., HA crashed or was killed before shutdown cleanup).
+    await _cleanup_orphaned_pairing_tokens(hass, pairing_coordinator)
+
+    @callback
+    def _handle_stop(_event) -> None:
+        coordinator.async_shutdown()
+        pairing_coordinator.async_shutdown()
+        camera_stream_coordinator.shutdown()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _handle_stop)
+    )
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    await _install_bundled_blueprints(hass)
+
+    if not entry.data.get("initial_setup_done"):
+        _show_pairing_notification(hass, entry, pairing_coordinator)
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "initial_setup_done": True}
+        )
+
+    async def _handle_force_resync(call: ServiceCall) -> None:
+        coordinator.async_force_resync()
+
+    hass.services.async_register(DOMAIN, SERVICE_FORCE_RESYNC, _handle_force_resync)
+
+    async def _handle_create_pairing_code(call: ServiceCall) -> ServiceResponse:
+        user = await _resolve_pairing_user(hass, call.context.user_id)
+        if user is None:
+            raise HomeAssistantError("Unable to resolve an active Home Assistant user for pairing.")
+
+        requested_local_url = _sanitize_base_url(call.data.get("local_url"))
+        local_url = requested_local_url or _sanitize_base_url(
+            hass.config.internal_url
+        ) or _discover_base_url(hass, prefer_external=False)
+        requested_remote_url = _sanitize_base_url(call.data.get("remote_url"))
+        remote_url = requested_remote_url or _sanitize_base_url(
+            hass.config.external_url
+        ) or _discover_base_url(hass, prefer_external=True)
+        lifespan_days = int(call.data.get("lifespan_days", 3650))
+        home_assistant_url = remote_url or local_url
+        if not home_assistant_url:
+            home_assistant_url = _discover_base_url(hass, prefer_external=True)
+        if not home_assistant_url:
+            raise HomeAssistantError(
+                "Set local_url/remote_url in the service call or configure internal/external URL in Home Assistant."
+            )
+
+        payload = await pairing_coordinator.async_refresh_active_pairing(
+            user,
+            home_assistant_url=home_assistant_url,
+            local_url=local_url,
+            remote_url=remote_url,
+            lifespan_days=lifespan_days,
+        )
+        return payload
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CREATE_PAIRING_CODE,
+        _handle_create_pairing_code,
+        schema=_CREATE_PAIRING_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    def _enrich_actions(actions: list[dict]) -> list[dict]:
+        """Enrich action dicts with entity state for entity-driven watch buttons.
+
+        The watch parses actions as entity actions (requiring entity_id + state).
+        This looks up the current entity state and domain-relevant attributes
+        from Home Assistant and adds them to each action dict.
+        """
+        _DOMAIN_ATTRS: dict[str, list[str]] = {
+            "light": ["brightness"],
+            "cover": ["current_position"],
+            "fan": ["percentage"],
+            "climate": ["temperature", "min_temp", "max_temp", "temperature_unit"],
+        }
+        enriched = []
+        for action in actions:
+            a = dict(action)
+            entity_id = a.get("entity_id")
+            if entity_id:
+                state_obj = hass.states.get(entity_id)
+                if state_obj:
+                    a.setdefault("state", state_obj.state)
+                    a.setdefault(
+                        "friendly_name",
+                        state_obj.attributes.get("friendly_name", entity_id),
+                    )
+                    domain = entity_id.split(".")[0]
+                    attrs: dict = {}
+                    for key in _DOMAIN_ATTRS.get(domain, []):
+                        if key in state_obj.attributes:
+                            attrs[key] = state_obj.attributes[key]
+                    if attrs:
+                        a.setdefault("attributes", attrs)
+            # Map legacy "title" → "label" for watch parser
+            if "title" in a and "label" not in a:
+                a["label"] = a["title"]
+            enriched.append(a)
+        return enriched
+
+    async def _handle_send_notification(call: ServiceCall) -> ServiceResponse:
+        data = hass.data[DOMAIN]
+        client = data.apns_client
+        if client is None:
+            raise HomeAssistantError(
+                "APNs client failed to initialize. Check Home Assistant logs for details."
+            )
+
+        store = data.notification_store
+        target_raw = call.data.get("target")
+
+        # Resolve device_id → watch_id (fallback to raw value for backwards compat)
+        target: str | None = None
+        if target_raw:
+            dev_reg = dr.async_get(hass)
+            device = dev_reg.async_get(target_raw)
+            if device:
+                for ident_domain, identifier in device.identifiers:
+                    if ident_domain == DOMAIN:
+                        target = identifier.replace("watch_", "")
+                        break
+            if target is None:
+                target = target_raw
+
+        message = call.data["message"]
+        title = call.data.get("title")
+        actions = call.data.get("actions")
+        category = "WA_ACTIONS" if actions else None
+        extra_data = dict(call.data.get("data") or {})
+        if actions:
+            extra_data["actions"] = _enrich_actions(actions)
+        for key in ("tag", "group", "priority"):
+            if (val := call.data.get(key)) is not None:
+                extra_data[key] = val
+        extra_data = extra_data or None
+        sound = call.data.get("sound")
+        push_type = call.data.get("push_type", "alert")
+
+        # Resolve targets (need full entries for environment)
+        if target:
+            token_entry = store.get_entry(target)
+            if token_entry is None:
+                raise HomeAssistantError(f"No registered push token for watch '{target}'")
+            targets = {target: token_entry}
+        else:
+            all_tokens = store.all_tokens
+            if not all_tokens:
+                raise HomeAssistantError("No watches have registered for push notifications")
+            targets = all_tokens
+
+        # Send to each target
+        sent = 0
+        failure_map: dict[str, str] = {}
+        for watch_id, tok_entry in targets.items():
+            success, reason, used_env = await client.send_push(
+                device_token=tok_entry.device_token,
+                title=title,
+                body=message,
+                category=category,
+                data=extra_data,
+                sound=sound,
+                push_type=push_type,
+                environment=tok_entry.environment,
+            )
+            if success:
+                sent += 1
+                if used_env != tok_entry.environment:
+                    store.register(
+                        watch_id,
+                        tok_entry.device_token,
+                        platform=tok_entry.platform,
+                        environment=used_env,
+                    )
+            else:
+                if APNsClient.is_dead_token(reason):
+                    _LOGGER.warning(
+                        "Removing dead token for watch_id=%s (reason=%s)",
+                        watch_id,
+                        reason,
+                    )
+                    store.remove(watch_id)
+                failure_map[watch_id] = reason or "unknown"
+
+        if failure_map and sent == 0:
+            reasons = ", ".join(f"{wid}: {r}" for wid, r in failure_map.items())
+            raise HomeAssistantError(f"All push notifications failed: {reasons}")
+
+        if failure_map:
+            reasons = ", ".join(f"{wid}: {r}" for wid, r in failure_map.items())
+            _LOGGER.warning("Some push notifications failed: %s", reasons)
+
+        return {"sent": sent, "failed": len(failure_map), "failures": failure_map}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_NOTIFICATION,
+        _handle_send_notification,
+        schema=_SEND_NOTIFICATION_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: WristAssistantConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        data: WristAssistantData | None = hass.data.pop(DOMAIN, None)
+        if data is not None:
+            data.coordinator.async_shutdown()
+            data.pairing_coordinator.async_shutdown()
+            data.camera_stream_coordinator.shutdown()
+        persistent_notification.async_dismiss(
+            hass, _PAIRING_NOTIFICATION_ID_TEMPLATE % entry.entry_id
+        )
+        hass.services.async_remove(DOMAIN, SERVICE_CREATE_PAIRING_CODE)
+        hass.services.async_remove(DOMAIN, SERVICE_FORCE_RESYNC)
+        hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
+    return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Allow removal of a device from the UI."""
+    return True
+
+
+async def _bootstrap_apns_config_if_needed(
+    hass: HomeAssistant, store: APNsConfigStore
+) -> None:
+    """Seed APNs config from bundled credentials for zero-touch setup."""
+    if store.is_configured:
+        return
+
+    from .apns_client import _BUNDLED_KEY_PATH  # noqa: WPS433
+
+    def _read_bundled_key() -> str:
+        if not _BUNDLED_KEY_PATH.exists():
+            return ""
+        return _BUNDLED_KEY_PATH.read_text()
+
+    key_content = await hass.async_add_executor_job(_read_bundled_key)
+    if not key_content.strip():
+        return
+
+    await store.async_save(
+        APNsConfig(
+            key_id=_BUNDLED_APNS_KEY_ID,
+            team_id=_BUNDLED_APNS_TEAM_ID,
+            topic=_BUNDLED_APNS_TOPIC,
+            private_key=key_content,
+        )
+    )
+    _LOGGER.info("Bootstrapped APNs credentials into managed storage")
+
+
+async def _create_apns_client(
+    hass: HomeAssistant, store: APNsConfigStore
+) -> APNsClient | None:
+    """Create APNs client from managed credential storage."""
+    import ssl
+
+    await _bootstrap_apns_config_if_needed(hass, store)
+    config = store.config
+    if config is None:
+        _LOGGER.warning("No APNs credentials configured")
+        return None
+
+    def _blocking_init() -> ssl.SSLContext:
+        return ssl.create_default_context()
+
+    try:
+        ssl_context = await hass.async_add_executor_job(_blocking_init)
+        return APNsClient(
+            config.private_key,
+            key_id=config.key_id,
+            team_id=config.team_id,
+            topic=config.topic,
+            ssl_context=ssl_context,
+        )
+    except Exception:
+        _LOGGER.exception("Failed to create APNs client")
+        return None
+
+
+def _cleanup_orphaned_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove entities from previous versions that no longer exist in code."""
+    ent_reg = er.async_get(hass)
+    removed = []
+    for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if any(entity_entry.unique_id.endswith(suffix) for suffix in _ORPHANED_SUFFIXES):
+            ent_reg.async_remove(entity_entry.entity_id)
+            removed.append(entity_entry.entity_id)
+    if removed:
+        _LOGGER.info("Cleaned up %d orphaned entities: %s", len(removed), removed)
+
+
+def _disable_noisy_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """One-time disable of noisy diagnostic entities on upgrade."""
+    ent_reg = er.async_get(hass)
+    disabled = []
+    for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if entity_entry.disabled:
+            continue
+        if any(entity_entry.unique_id.endswith(s) for s in _DISABLE_ON_UPGRADE_SUFFIXES):
+            ent_reg.async_update_entity(
+                entity_entry.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+            )
+            disabled.append(entity_entry.entity_id)
+    if disabled:
+        _LOGGER.info("Disabled %d noisy entities on upgrade: %s", len(disabled), disabled)
+
+
+def _sanitize_base_url(value: str | None) -> str:
+    """Normalize Home Assistant base URLs."""
+    if value is None:
+        return ""
+    trimmed = value.strip()
+    if not trimmed:
+        return ""
+
+    if "://" not in trimmed:
+        # Default to http:// for local-looking hostnames to avoid silently
+        # upgrading plain-HTTP HA instances to unreachable HTTPS URLs.
+        trimmed = f"http://{trimmed}"
+
+    try:
+        parsed = cv.url(trimmed)
+    except vol.Invalid:
+        return ""
+    if not parsed.startswith(("http://", "https://")):
+        return ""
+
+    return parsed.rstrip("/")
+
+
+def _discover_base_url(hass: HomeAssistant, *, prefer_external: bool) -> str:
+    """Best-effort discover a reachable Home Assistant base URL."""
+    try:
+        discovered = network.get_url(
+            hass,
+            prefer_external=prefer_external,
+            allow_ip=True,
+            require_ssl=False,
+        )
+    except HomeAssistantError:
+        return ""
+    return _sanitize_base_url(discovered)
+
+
+async def _resolve_pairing_user(hass: HomeAssistant, user_id: str | None):
+    """Resolve user for pairing token creation."""
+    if user_id:
+        user = await hass.auth.async_get_user(user_id)
+        if user is not None and user.is_active:
+            return user
+
+    for user in await hass.auth.async_get_users():
+        if user.is_owner and user.is_active:
+            return user
+    _LOGGER.warning(
+        "No active owner user found for Wrist Assistant pairing; "
+        "pairing will not be available until an owner user exists"
+    )
+    return None
+
+
+async def _cleanup_orphaned_pairing_tokens(
+    hass: HomeAssistant, pairing: PairingCoordinator
+) -> None:
+    """Revoke leftover pairing refresh tokens from previous runs.
+
+    When HA crashes or is killed, shutdown cleanup never runs, leaving
+    orphaned long-lived tokens in the auth system. Identify them by
+    client_id and client_name prefix, then revoke any that are not
+    tracked by the current PairingCoordinator.
+
+    Only revoke tokens that were never redeemed (last_used_at is None).
+    Redeemed tokens have been issued to a watch app and must be kept.
+    """
+    active_token_ids = pairing.tracked_refresh_token_ids
+    revoked = 0
+    for user in await hass.auth.async_get_users():
+        for token in list(user.refresh_tokens.values()):
+            if (
+                token.client_id == PAIRING_CLIENT_ID
+                and token.client_name
+                and (
+                    token.client_name.startswith("Wrist Assistant QR Pairing")
+                    or token.client_name.startswith("Wrist Assistant Pairing")
+                )
+                and token.id not in active_token_ids
+                and token.last_used_at is None
+            ):
+                hass.auth.async_remove_refresh_token(token)
+                revoked += 1
+    if revoked:
+        _LOGGER.info(
+            "Revoked %d orphaned Wrist Assistant pairing token(s) from previous runs",
+            revoked,
+        )
+
+
+async def _install_bundled_blueprints(hass: HomeAssistant) -> None:
+    """Copy bundled blueprint files into the HA blueprints directory.
+
+    Runs the file copy in the executor to avoid blocking the event loop.
+    Overwrites existing files so updates ship with new integration versions.
+    """
+    src_dir = Path(__file__).parent / "blueprints" / "script"
+    dest_dir = Path(hass.config.path("blueprints")) / "script" / DOMAIN
+
+    if not src_dir.is_dir():
+        return
+
+    def _copy() -> list[str]:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        installed: list[str] = []
+        for src_file in src_dir.iterdir():
+            if src_file.suffix in (".yaml", ".yml") and src_file.is_file():
+                dest_file = dest_dir / src_file.name
+                dest_file.write_text(src_file.read_text())
+                installed.append(src_file.name)
+        return installed
+
+    try:
+        installed = await hass.async_add_executor_job(_copy)
+        if installed:
+            _LOGGER.debug("Installed bundled blueprints: %s", installed)
+    except Exception:
+        _LOGGER.warning("Failed to install bundled blueprints", exc_info=True)
+
+
+def _show_pairing_notification(
+    hass: HomeAssistant, entry: ConfigEntry, pairing: PairingCoordinator
+) -> None:
+    """Show persistent pairing notification."""
+    message = (
+        "### Long-Lived Access Token (recommended)\n\n"
+        "Call the `wrist_assistant.create_pairing_code` service to generate "
+        "a pairing code, then enter the values in the Wrist Assistant app.\n\n"
+        "### OAuth\n\n"
+        "Choose **OAuth** in the app — no code needed. "
+        "The app will open your Home Assistant login page directly."
+    )
+    persistent_notification.async_create(
+        hass,
+        message=message,
+        title="Wrist Assistant pairing ready",
+        notification_id=_PAIRING_NOTIFICATION_ID_TEMPLATE % entry.entry_id,
+    )

@@ -1,0 +1,26 @@
+homeassistant:
+  enabled: true
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://192.168.28.178
+serial:
+  port: /dev/ttyUSB0
+frontend:
+  enabled: true
+  port: 8080
+version: 5
+devices:
+  '0x2c1165fffe38f2c8':
+    friendly_name: Bürobutton
+  '0x00158d008c4b0068':
+    friendly_name: Aquara-Sensor-PC-platz
+  '0x2c1165fffe2d42b7':
+    friendly_name: Bettbutton
+  '0x00158d008c4b0072':
+    friendly_name: Bettsensor
+  '0x0c4314fffef7fae6':
+    friendly_name: Schlaflicht
+  '0x0c4314fffea75c93':
+    friendly_name: pclampe
+  '0x00158d008bc381e1':
+    friendly_name: 3D-Druck-Zone

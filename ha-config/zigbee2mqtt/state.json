@@ -1,0 +1,97 @@
+{
+    "0x00158d008c4b0068": {
+        "linkquality": 178,
+        "voltage": 3005,
+        "battery": 100,
+        "power_outage_count": 5,
+        "temperature": 24.23,
+        "humidity": 35.12,
+        "pressure": 977.4
+    },
+    "0x00158d008c4b0072": {
+        "temperature": 20.28,
+        "humidity": 36.42,
+        "pressure": 977.4,
+        "linkquality": 72,
+        "voltage": 3035,
+        "battery": 100,
+        "power_outage_count": 5
+    },
+    "0x00158d008bc381e1": {
+        "linkquality": 98,
+        "voltage": 3035,
+        "battery": 100,
+        "power_outage_count": 7,
+        "temperature": 22.4,
+        "humidity": 38.71,
+        "pressure": 977.4
+    },
+    "0x2c1165fffe38f2c8": {
+        "battery": 100,
+        "voltage": 3000,
+        "linkquality": 145
+    },
+    "0x2c1165fffe2d42b7": {
+        "battery": 100,
+        "voltage": 3000,
+        "linkquality": 91
+    },
+    "0x0c4314fffea75c93": {
+        "brightness": 254,
+        "state": "OFF",
+        "update": {
+            "state": "idle",
+            "installed_version": 537029168,
+            "latest_version": 537029168,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Innr/1166-0120-20026A30-RF_263-upgradeMe.ota",
+            "latest_release_notes": null
+        },
+        "power_on_behavior": "on",
+        "level_config": {
+            "on_level": "previous"
+        },
+        "linkquality": 204
+    },
+    "0x0c4314fffef7fae6": {
+        "update": {
+            "state": "idle",
+            "installed_version": 537029168,
+            "latest_version": 537029168,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Innr/1166-0120-20026A30-RF_263-upgradeMe.ota",
+            "latest_release_notes": null
+        },
+        "brightness": 254,
+        "state": "ON",
+        "power_on_behavior": "on",
+        "linkquality": 98
+    },
+    "0x7cb03eaa0a0b0dc0": {
+        "state": "ON",
+        "update": {
+            "state": "idle",
+            "installed_version": 16909577,
+            "latest_version": 16909577,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Osram/ZLL_Plug01_OnOff_MK_0x01020509.ota",
+            "latest_release_notes": null
+        },
+        "linkquality": 87
+    },
+    "0x001788010916738d": {
+        "battery": 100,
+        "occupancy_timeout": 6403,
+        "occupancy": true,
+        "temperature": 22.47,
+        "illuminance": 1,
+        "update": {
+            "state": "idle",
+            "installed_version": 1124103169,
+            "latest_version": 1124103169,
+            "latest_source": null,
+            "latest_release_notes": null
+        },
+        "led_indication": false,
+        "motion_sensitivity": "low",
+        "linkquality": 87,
+        "illuminance_raw": 0
+    }
+}

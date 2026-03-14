@@ -1,0 +1,19 @@
+# Home Assistant Lärm ignorieren
+ha-config/.storage/
+ha-config/.cache/
+ha-config/__pycache__/
+ha-config/*.log
+ha-config/*.log.*
+ha-config/*.db
+ha-config/*.db-*
+ha-config/backups/
+ha-config/tts/
+ha-config/.ha_run.lock
+
+# Zigbee2MQTT Lärm
+z2m-data/log/
+z2m-data/state.json
+
+# BambuLab Media (da sind riesige Gcode/Bilder drin!)
+ha-config/www/media/ha-bambulab/
+ha-config/backups/

@@ -1,0 +1,111 @@
+blueprint:
+  name: Easy Customizable Controller Automation Blueprint for Lidl Smart Button in
+    Zigbee2MQTT
+  description: 'Controller automation for easy customizable Actions with Lidl Smart
+    Button.
+
+
+
+    ----------------------------------------------------------------------
+
+    __-------->  !!!!!!!!! FRUSTRATION CAUTION !!!!!!!!!   <--------__
+
+    ----------------------------------------------------------------------
+
+    _______________________________██████
+
+    _______________________________██████
+
+    _______________________________██████
+
+    ___________________________███████████
+
+    ______________________________███████
+
+    __________________________________██
+
+    __This Button is very unique in its way to operate and makes some actions very
+    inconvenient.__
+
+    __The Control on Hold is Firmware based and cannot be Customized!__
+
+    __The hold button is first stepping up 3 times then stepping down 4 times.__
+
+    __Trippleclick is locking the Button it can only be unlocked by tripple clicking
+    again! (also Firmware)__
+
+    __After you doubleclick you''re not able to use the on hold feature only the on
+    hold release.__
+
+    __You need to single click to activate the hold feature again__'
+  domain: automation
+  input:
+    controller:
+      name: (Zigbee2MQTT) Controller Name
+      description: The name of the controller/Dimmer-Switch in Zigbee2MQTT (Not the
+        name of your Home-Assistent Entity)
+      default: ''
+    base_topic:
+      name: Root/Base mqtt topic from Zigbee2MQTT
+      description: The Root/base topic as configured in Zigbee2MQTT (If you dont configured
+        it you can leave the default --> "zigbee2mqtt")
+      default: zigbee2mqtt
+    Button_single_click:
+      name: Button singleclick
+      description: Action set to run, when you press the Button once.
+      default: []
+      selector:
+        action: {}
+    Button_double_click:
+      name: Button doublekclick
+      description: Action set to run, when you press the Button twice.
+      default: []
+      selector:
+        action: {}
+    button_hold_going_up:
+      name: Button Hold increase
+      description: Action set to run, when the Button is held for a short while. (unstable
+        cause of Buttons Firmware)
+      default: []
+      selector:
+        action: {}
+    button_hold_going_down:
+      name: Button Hold decrase
+      description: Action set to run, when the Button is held for a long while. (unstable
+        cause of Buttons Firmware)
+      default: []
+      selector:
+        action: {}
+    release_hold:
+      name: Up Held
+      description: Action set to run, when the Up is held.
+      default: []
+      selector:
+        action: {}
+  source_url: https://gist.github.com/patpac9/9e2c9235841ee520ec42be604c8c74a5
+mode: parallel
+max: 6
+trigger_variables:
+  base_topic: !input base_topic
+  controller: !input controller
+trigger:
+- platform: mqtt
+  topic: '{{ base_topic ~ ''/'' ~ controller }}'
+action:
+- variables:
+    controller: !input controller
+- choose:
+  - conditions: '{{(''brightness'' in trigger.payload_json.action) or (''on'' in trigger.payload_json.action)
+      or ''off'' in trigger.payload_json.action}}'
+    sequence:
+    - choose:
+      - conditions: '{{ trigger.payload_json.action == "on" }}'
+        sequence: !input Button_single_click
+      - conditions: '{{ trigger.payload_json.action == "off" }}'
+        sequence: !input Button_double_click
+      - conditions: '{{ trigger.payload_json.action == "brightness_step_up" }}'
+        sequence: !input button_hold_going_up
+      - conditions: '{{ trigger.payload_json.action == "brightness_step_down" }}'
+        sequence: !input button_hold_going_down
+      - conditions: '{{ trigger.payload_json.action == "brightness_stop" }}'
+        sequence: !input release_hold

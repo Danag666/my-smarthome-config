@@ -1,0 +1,86 @@
+version: 5
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://core-mosquitto:1883
+  user: addons
+  password: phaireeva2ay1wohNgieth4ea3pin3gaemohd6heeN8niebi8Ahd2ii9iec3ac7a
+serial:
+  port: >-
+    /dev/serial/by-id/usb-Silicon_Labs_Sonoff_Zigbee_3.0_USB_Dongle_Plus_0001-if00-port0
+  adapter: zstack
+  baudrate: 115200
+  rtscts: false
+advanced:
+  channel: 25
+  network_key:
+    - 163
+    - 131
+    - 110
+    - 153
+    - 186
+    - 210
+    - 17
+    - 209
+    - 113
+    - 80
+    - 180
+    - 174
+    - 15
+    - 232
+    - 231
+    - 27
+  pan_id: 14505
+  ext_pan_id:
+    - 29
+    - 210
+    - 64
+    - 211
+    - 69
+    - 80
+    - 126
+    - 215
+  log_level: debug
+frontend:
+  enabled: true
+  port: 8099
+homeassistant:
+  enabled: true
+onboarding: false
+devices:
+  '0x00158d008c4b0068':
+    friendly_name: LuMi.Wetter.PCbereich
+    disable_automatic_update_check: false
+    homeassistant:
+      name: LuMi.PC-Bereich
+  '0x00158d008c4b0072':
+    friendly_name: LuMi.Wetter.Bettbereich
+    homeassistant:
+      name: LuMi.Wetter.Bettbereich
+    filtered_optimistic: []
+    filtered_attributes: []
+    optimistic: false
+  '0x00158d008bc381e1':
+    friendly_name: LuMi.Wetter.3D-Drucker
+    homeassistant:
+      name: LuMi.Wetter.3D-Drucker
+    temperature_precision: 3
+    humidity_precision: 3
+    pressure_precision: 2
+  '0x2c1165fffe38f2c8':
+    friendly_name: Smert.Button.01
+  '0x2c1165fffe2d42b7':
+    friendly_name: Smert.Button.02
+  '0x0c4314fffea75c93':
+    friendly_name: PC-Lampe
+    homeassistant:
+      name: Lampe-PC
+  '0x0c4314fffef7fae6':
+    friendly_name: Lampe-Bettbereich
+  '0x7cb03eaa0a0b0dc0':
+    friendly_name: Steckdose.AVM2Unify
+    homeassistant:
+      name: Steckdose.AVM2Unify
+  '0x001788010916738d':
+    friendly_name: Hue-Motiondetect
+    illuminance_raw: true
+    no_occupancy_since: []

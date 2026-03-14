@@ -1,0 +1,81 @@
+- id: '1773080312225'
+  alias: TS004F Zigbee Button (ZHA)
+  description: ''
+  use_blueprint:
+    path: patpac9/Lidl_Smart_Button_Easy_Custom_Actions.yaml
+    input:
+      controller: Bürobutton
+      Button_single_click:
+      - action: light.toggle
+        metadata: {}
+        data:
+          brightness_pct: 100
+        target:
+          device_id: 38e3490a8a4e24195eea71675712ea9b
+      Button_double_click:
+      - action: light.toggle
+        metadata: {}
+        target:
+          entity_id: light.schlaflicht
+        data:
+          brightness_pct: 100
+- id: '1773083679272'
+  alias: test tuya lampe
+  description: ''
+  use_blueprint:
+    path: lehenandmartin/ZHA-1-Button-TS004F.yaml
+    input:
+      remote: 7c24358dadccbdc18d8d8c32880b9176
+      single_press_action:
+      - action: light.toggle
+        metadata: {}
+        target:
+          device_id: ccf7443e782995d44bb352c53b16983e
+        data: {}
+- id: '1773083977991'
+  alias: Easy Customizable Controller Automation Blueprint for Lidl Smart Button in
+    Zigbee2MQTT
+  description: ''
+  use_blueprint:
+    path: patpac9/Lidl_Smart_Button_Easy_Custom_Actions.yaml
+- id: '1773095158183'
+  alias: Lampe-PC-mit-Smert.b.01
+  description: ''
+  use_blueprint:
+    path: patpac9/Lidl_Smart_Button_Easy_Custom_Actions.yaml
+    input:
+      controller: ' Smert.Button.01'
+      Button_single_click:
+      - action: light.toggle
+        metadata: {}
+        target:
+          entity_id: light.lampe_pc
+        data: {}
+- id: '1773096371572'
+  alias: Bett onoff
+  description: ''
+  use_blueprint:
+    path: patpac9/Lidl_Smart_Button_Easy_Custom_Actions.yaml
+    input:
+      controller: Bettbutton
+      Button_single_click:
+      - action: light.toggle
+        metadata: {}
+        data:
+          brightness_pct: 100
+        target:
+          entity_id: light.schlaflicht
+      Button_double_click: []
+- id: '1773357130629'
+  alias: Hue Bewegungssensor test
+  description: ''
+  use_blueprint:
+    path: WizBangCrash/occupancy-response-sml001.yaml
+    input:
+      occupancy_entity: binary_sensor.hue_motiondetect_occupancy
+      ieee_id: '0x001788010916738d'
+      illuminance_entity: sensor.hue_motiondetect_illuminance
+      light_entity: light.pc_lampe
+      daytime_brightness: 100
+      nighttime_brightness: 50
+      o_to_u_delay: 2

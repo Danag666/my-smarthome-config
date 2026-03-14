@@ -1,0 +1,63 @@
+blueprint:
+  name: TS004F Zigbee Button (ZHA)
+  description: Use TS004F Zigbee single button (single/double/long press) as trigger
+    for your automations
+  domain: automation
+  input:
+    zigbee_button:
+      name: TS004F 1-Button Device
+      description: Select the TS004F single button
+      selector:
+        device:
+          integration: zha
+          model: TS004F
+          multiple: false
+    toggle_action:
+      name: Single press action
+      description: 'Action for ''single press'' command (default: do nothing)'
+      default: []
+      selector:
+        action: {}
+    on_action:
+      name: Double press action
+      description: 'Action for ''double press'' command (default: do nothing)'
+      default: []
+      selector:
+        action: {}
+    off_action:
+      name: Long press action
+      description: 'Action for ''long press'' command (default: do nothing)'
+      default: []
+      selector:
+        action: {}
+  source_url: https://gist.github.com/JonyIvy/b335e311a1b43d4b3869c5167861c08b
+triggers:
+- trigger: event
+  event_type: zha_event
+  event_data:
+    device_id: !input zigbee_button
+    command: toggle
+- trigger: event
+  event_type: zha_event
+  event_data:
+    device_id: !input zigbee_button
+    command: 'on'
+- trigger: event
+  event_type: zha_event
+  event_data:
+    device_id: !input zigbee_button
+    command: 'off'
+action:
+- variables:
+    command: '{{ trigger.event.data.command | string }}'
+- choose:
+  - conditions:
+    - '{{ command == ''toggle'' }}'
+    sequence: !input toggle_action
+  - conditions:
+    - '{{ command == ''on'' }}'
+    sequence: !input on_action
+  - conditions:
+    - '{{ command == ''off'' }}'
+    sequence: !input off_action
+mode: single

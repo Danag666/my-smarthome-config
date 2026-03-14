@@ -1,0 +1,15 @@
+{
+  "domain": "smartenergy_awattar",
+  "name": "Awattar",
+  "codeowners": [
+    "@openkfw"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/openkfw/smartenergy.awattar",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/openkfw/smartenergy.awattar/issues",
+  "requirements": [
+    "smart-energy.awattar-api==0.2.0"
+  ],
+  "version": "0.2.3"
+}

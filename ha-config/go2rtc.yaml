@@ -1,0 +1,5 @@
+api:
+  username: http://192.168.28.211:4008/webcam/webrtc
+rtsp:
+  listen: 127.0.0.1:8554
+  username: http://192.168.28.211:4008/webcam/webrtc

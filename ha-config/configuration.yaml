@@ -17,3 +17,8 @@ scene: !include scenes.yaml
 #  default: warning
 #  logs:
 #    custom_components.zha_toolkit: debug
+sensor:
+# Neue Syntax für Datei-Sensoren
+file:
+  - file_path: /config/last_backup.txt
+    name: "Letztes GitHub Backup"

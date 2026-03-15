@@ -1,0 +1,18 @@
+# Home Assistant - Git Ignore File
+*.db
+*.log
+__pycache__/
+.vscode/
+.git_credential_helper*.sh
+
+
+# Exclusions via Blueprint Studio
+.HA_VERSION
+.cache/
+.cloud/
+.ha_run.lock
+.storage/
+backups/
+go2rtc-1.9.9
+home-assistant_v2.db
+www/

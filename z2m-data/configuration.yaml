@@ -24,3 +24,9 @@ devices:
     friendly_name: pclampe
   '0x00158d008bc381e1':
     friendly_name: 3D-Druck-Zone
+  '0x001788010916738d':
+    friendly_name: Motionsniffer
+    qos: 1
+    homeassistant:
+      name: Motionsniffer
+    illuminance_raw: true
